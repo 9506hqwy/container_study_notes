@@ -1,0 +1,38 @@
+{
+    // Dev Container's Name.
+    "name": "Python 3",
+    // Base Container Image.
+    "image": "mcr.microsoft.com/devcontainers/python:3.13-trixie",
+    // For running using Podman.
+    // https://github.com/microsoft/vscode-remote-release/issues/4443
+    "runArgs": [
+        "--userns=keep-id"
+    ],
+    "securityOpt": [
+        "label=disable",
+        "seccomp=unconfined"
+    ],
+    // Set container's environment variables.
+    "containerEnv": {
+        "UV_LINK_MODE": "copy"
+    },
+    // Use 'onCreateCommand' to run commands after the container is created.
+    "onCreateCommand": "/bin/bash ${containerWorkspaceFolder}/.devcontainer/on-create.sh",
+    // Uncomment to connect as root instead.
+    //"remoteUser": "root",
+    // Use default container `USER`,
+    // because of avoid reject directory creating by container startup user.
+    "containerUser": "vscode",
+    // Expose preview server port.
+    "forwardPorts": [
+        8000
+    ],
+    // Customize vscode.
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": ".venv/bin/python"
+            }
+        }
+    }
+}

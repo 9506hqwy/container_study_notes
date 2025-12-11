@@ -1,0 +1,14 @@
+[project]
+name = "container_study_notes"
+version = "0.1.0"
+authors = [{ name = "9506hqwy" }]
+description = "Container study notes"
+readme = "index.md"
+requires-python = ">= 3.13"
+dependencies = ["myst-parser>=4.0.1", "sphinx-rtd-theme>=3.0.2"]
+
+[project.urls]
+Homepage = "https://github.com/9506hqwy/container_study_notes"
+
+[dependency-groups]
+dev = ["sphinx-autobuild>=2025.8.25"]

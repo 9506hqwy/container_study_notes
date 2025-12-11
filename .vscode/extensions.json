@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "3w36zj6.textlint",
+        "davidanson.vscode-markdownlint",
+        "editorconfig.editorconfig",
+        "ms-python.python",
+        "tamasfe.even-better-toml",
+        "timonwong.shellcheck",
+        "yzhang.markdown-all-in-one"
+    ]
+}
