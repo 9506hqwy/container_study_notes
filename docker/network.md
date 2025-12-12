@@ -1,0 +1,868 @@
+# ネットワーク
+
+既定で下記のネットワークが作成される。
+
+```sh
+docker network ls
+```
+
+```text
+NETWORK ID     NAME         DRIVER    SCOPE
+67ba8c5eb9c7   bridge       bridge    local
+3f2dbdf242e3   host         host      local
+0f656794ef2c   none         null      local
+```
+
+## ドライバ `bridge`
+
+コンテナは既定で `default_bridge` の `bridge` に接続される。
+`bridge` は `docker0` ブリッジを構成している。
+
+```sh
+docker network inspect bridge
+```
+
+```json
+[
+    {
+        "Name": "bridge",
+        "Id": "67ba8c5eb9c7373e51834bac5ccff78e49cd161460467f7c71f1221355bb423b",
+        "Created": "2025-12-11T18:57:26.546058947+09:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.17.0.0/16",
+                    "IPRange": "",
+                    "Gateway": "172.17.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {
+            "com.docker.network.bridge.default_bridge": "true",
+            "com.docker.network.bridge.enable_icc": "true",
+            "com.docker.network.bridge.enable_ip_masquerade": "true",
+            "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+            "com.docker.network.bridge.name": "docker0",
+            "com.docker.network.driver.mtu": "1500"
+        },
+        "Labels": {},
+        "Containers": {},
+        "Status": {
+            "IPAM": {
+                "Subnets": {
+                    "172.17.0.0/16": {
+                        "IPsInUse": 3,
+                        "DynamicIPsAvailable": 65533
+                    }
+                }
+            }
+        }
+    }
+]
+```
+
+`docker0` を確認する。
+
+```sh
+ip -d link show docker0
+```
+
+```text
+5: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+    link/ether 12:5e:bc:81:67:d6 brd ff:ff:ff:ff:ff:ff promiscuity 0 allmulti 0 minmtu 68 maxmtu 65535
+    bridge forward_delay 1500 hello_time 200 max_age 2000 ageing_time 30000 stp_state 0 priority 32768 vlan_filtering 0 vlan_protocol 802.1Q bridge_id 8000.12:5e:bc:81:67:d6 designated_root 8000.12:5e:bc:81:67:d6 root_port 0 root_path_cost 0 topology_change 0 topology_change_detected 0 hello_timer    0.00 tcn_timer    0.00 topology_change_timer    0.00 gc_timer  142.52 fdb_n_learned 0 fdb_max_learned 0 vlan_default_pvid 1 vlan_stats_enabled 0 vlan_stats_per_port 0 group_fwd_mask 0 group_address 01:80:c2:00:00:00 mcast_snooping 1 no_linklocal_learn 0 mcast_vlan_snooping 0 mst_enabled 0 mdb_offload_fail_notification 0 mcast_router 1 mcast_query_use_ifaddr 0 mcast_querier 0 mcast_hash_elasticity 16 mcast_hash_max 4096 mcast_last_member_count 2 mcast_startup_query_count 2 mcast_last_member_interval 100 mcast_membership_interval 26000 mcast_querier_interval 25500 mcast_query_interval 12500 mcast_query_response_interval 1000 mcast_startup_query_interval 3125 mcast_stats_enabled 0 mcast_igmp_version 2 mcast_mld_version 1 nf_call_iptables 0 nf_call_ip6tables 0 nf_call_arptables 0 addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 tso_max_size 65536 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 65536 gro_ipv4_max_size 65536
+```
+
+ファイアウォールは既定で `ACCEPT` に設定されている。
+
+```sh
+sudo firewall-cmd --list-all --zone=$(firewall-cmd --get-zone-of-interface=docker0)
+```
+
+```text
+docker (active)
+  target: ACCEPT
+  ingress-priority: 0
+  egress-priority: 0
+  icmp-block-inversion: no
+  interfaces: br-f343de58767d docker0
+  sources:
+  services:
+  ports:
+  protocols:
+  forward: yes
+  masquerade: no
+  forward-ports:
+  source-ports:
+  icmp-blocks:
+  rich rules:
+```
+
+コンテナを起動すると `docker0` に接続された veth peer でコンテナが接続される。
+
+```sh
+docker run --name test --rm -d redhat/ubi10 tail -f /dev/null
+```
+
+```text
+50134c8cc403942766c3ddbf8e5008df3a3bec419bd037beef418ed67962c5fa
+```
+
+コンテナホストの veth を確認する。
+
+```sh
+ip link show vethec09447
+```
+
+```text
+14: vethec09447@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master docker0 state UP mode DEFAULT group default
+    link/ether 4e:ed:27:35:c7:61 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+```
+
+コンテナの veth を確認する。
+
+```sh
+docker exec test ip link show eth0
+```
+
+```text
+2: eth0@if14: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default
+    link/ether fe:23:38:c4:8e:d6 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+```
+
+ルーティングは docker0 が設定される。
+
+```sh
+docker exec test ip route show
+```
+
+```text
+default via 172.17.0.1 dev eth0
+172.17.0.0/16 dev eth0 proto kernel scope link src 172.17.0.2
+```
+
+DNS はコンテナホストを同じ値が設定される。
+
+```sh
+docker exec test cat /etc/resolv.conf
+```
+
+```text
+# Generated by Docker Engine.
+# This file can be edited; Docker Engine will not make further changes once it
+# has been modified.
+
+nameserver 172.24.96.1
+search mshome.net home.local
+
+# Based on host file: '/etc/resolv.conf' (legacy)
+# Overrides: []
+```
+
+veth のファイアウォールのゾーンは設定されない。
+
+```sh
+firewall-cmd --get-zone-of-interface=vethec09447
+```
+
+```text
+no zone
+```
+
+## ドライバ `host`
+
+コンテナホストのネットワークを共有する。
+
+```sh
+docker network inspect host
+```
+
+```json
+[
+    {
+        "Name": "host",
+        "Id": "3f2dbdf242e338f74be61183174996deef0331696eb3226056b48722cd1f8c06",
+        "Created": "2025-12-10T19:26:39.557786281+09:00",
+        "Scope": "local",
+        "Driver": "host",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": null
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {},
+        "Labels": {},
+        "Containers": {},
+        "Status": {
+            "IPAM": {}
+        }
+    }
+]
+```
+
+コンテナを起動するとコンテナホストと同じネットワークが参照できる。
+
+```sh
+docker run --network host --name test --rm -d redhat/ubi10 tail -f /dev/null
+```
+
+```text
+68de204ed598b4996c4c580b661d19ad7440f28914c5ccfa53489743cdd38c0d
+```
+
+同じ `docker0` が参照できる。ルーティングや DNS もコンテナホストと同じ設定になる。
+
+```sh
+docker exec test ip link show docker0
+```
+
+```text
+5: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default
+    link/ether 12:5e:bc:81:67:d6 brd ff:ff:ff:ff:ff:ff
+```
+
+## ドライバ `null`
+
+コンテナを隔離する。
+
+```sh
+docker network inspect none
+```
+
+```json
+[
+    {
+        "Name": "none",
+        "Id": "0f656794ef2ce80a1c8d20f75cfffdf93e47d004ded2f9a4311931bb79c4c0e1",
+        "Created": "2025-12-10T19:26:39.554907811+09:00",
+        "Scope": "local",
+        "Driver": "null",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": null
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {},
+        "Labels": {},
+        "Containers": {},
+        "Status": {
+            "IPAM": {}
+        }
+    }
+]
+```
+
+コンテナを起動するとループバックインターフェイスのみとなる。
+
+```sh
+docker run --network none --name test --rm -d redhat/ubi10 tail -f /dev/null
+```
+
+```text
+e92c99e3b0599466b90f5095183508bf2ec87eed0794a8460be811e5ee01115b
+```
+
+コンテナのネットワークアダプタを確認する。
+
+```sh
+docker exec test ip link
+```
+
+```text
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+```
+
+## ドライバ `ipvlan`
+
+コンテナホストの MAC アドレスを共有して別の IP アドレスをコンテナに設定する。
+
+### L2 モード
+
+既定で作成されるネットワークに `ipvlan` はないため作成する。
+コンテナホストの `eth0` のネットワーク設定を指定してネットワークを作成する。
+
+コンテナホスト側のネットワーク IP 範囲に重複しない IP アドレスを `--ip-range` に指定する。
+
+```sh
+docker network create \
+    --driver ipvlan \
+    --gateway 172.24.96.1 \
+    --subnet 172.24.96.0/20 \
+    --ip-range 172.24.97.0/24 \
+    -o parent=eth0 \
+    ipvlanl2
+```
+
+```text
+d24e71efc0fafa397375bbe399be0abafcd54fe85286aceb60b62e3351927ef7
+```
+
+ネットワークを確認する。
+
+```sh
+docker network inspect ipvlanl2
+```
+
+```json
+[
+    {
+        "Name": "ipvlanl2",
+        "Id": "d24e71efc0fafa397375bbe399be0abafcd54fe85286aceb60b62e3351927ef7",
+        "Created": "2025-12-11T23:14:01.130353119+09:00",
+        "Scope": "local",
+        "Driver": "ipvlan",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "172.24.96.0/20",
+                    "IPRange": "172.24.97.0/24",
+                    "Gateway": "172.24.96.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {
+            "parent": "eth0"
+        },
+        "Labels": {},
+        "Containers": {},
+        "Status": {
+            "IPAM": {
+                "Subnets": {
+                    "172.24.96.0/20": {
+                        "IPsInUse": 3,
+                        "DynamicIPsAvailable": 256
+                    }
+                }
+            }
+        }
+    }
+]
+```
+
+コンテナを起動すると eth0 のサブインターフェイスでコンテナが接続される。
+
+```sh
+docker run --network ipvlanl2 --name test --rm -d redhat/ubi10 tail -f /dev/null
+```
+
+```text
+1ef4f767ac314cb04e83f03f17a5d46b1b6a879e55c7ea3a223993ace5e8b16f
+```
+
+コンテナホストの eth0 を確認する。
+
+```sh
+ip -d link show eth0
+```
+
+```text
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff promiscuity 0 allmulti 0 minmtu 68 maxmtu 65521 addrgenmode none numtxqueues 64 numrxqueues 64 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536 parentbus vmbus parentdev d2916833-b8d8-44ec-89dc-3f4cd7d84668
+    altname enx00155d002606
+```
+
+コンテナの eth0 を確認する。
+
+```sh
+docker exec test ip -d link show eth0
+```
+
+```text
+19: eth0@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff link-netnsid 0 promiscuity 0 allmulti 0 minmtu 68 maxmtu 65535
+    ipvlan  mode l2 bridge addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536
+```
+
+コンテナの eth0 の IP アドレスを確認する。
+
+```sh
+docker exec test ip -d addr show eth0
+```
+
+```text
+19: eth0@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff link-netnsid 0 promiscuity 0 allmulti 0 minmtu 68 maxmtu 65535
+    ipvlan  mode l2 bridge numtxqueues 1 numrxqueues 1 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536
+    inet 172.24.97.0/20 brd 172.24.111.255 scope global eth0
+       valid_lft forever preferred_lft forever
+```
+
+ルーティングは eth0 が設定される。
+
+```sh
+docker exec test ip route show
+```
+
+```text
+default via 172.24.96.1 dev eth0
+172.24.96.0/20 dev eth0 proto kernel scope link src 172.24.97.0
+```
+
+DNS は docker 内部の DNS サーバが設定される。
+
+```sh
+docker exec test cat /etc/resolv.conf
+```
+
+```text
+# Generated by Docker Engine.
+# This file can be edited; Docker Engine will not make further changes once it
+# has been modified.
+
+nameserver 127.0.0.11
+search mshome.net home.local
+options ndots:0
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(172.24.96.1)]
+# Overrides: []
+# Option ndots from: internal
+```
+
+### L3 モード
+
+既定で作成されるネットワークに `ipvlan` はないため作成する。
+コンテナホストの `eth0` のネットワーク設定を指定してネットワークを作成する。
+
+コンテナホスト側のネットワークとは別セグメントを `--subnet` に指定する。
+`--gatwary` オプションは無視される。
+
+```sh
+docker network create \
+    --driver ipvlan \
+    --subnet 192.168.1.0/24 \
+    -o parent=eth0 \
+    -o ipvlan_mode=l3 \
+    ipvlanl3
+```
+
+```text
+9eca34073c709d3f4cbcc47d4c42aa38532129660d5846a9988cd0c0db53479f
+```
+
+ネットワークを確認する。
+
+```sh
+docker network inspect ipvlanl3
+```
+
+```json
+[
+    {
+        "Name": "ipvlanl3",
+        "Id": "9eca34073c709d3f4cbcc47d4c42aa38532129660d5846a9988cd0c0db53479f",
+        "Created": "2025-12-12T00:35:07.116143959+09:00",
+        "Scope": "local",
+        "Driver": "ipvlan",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "192.168.1.0/24",
+                    "IPRange": "",
+                    "Gateway": ""
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {
+            "ipvlan_mode": "l3",
+            "parent": "eth0"
+        },
+        "Labels": {},
+        "Containers": {},
+        "Status": {
+            "IPAM": {
+                "Subnets": {
+                    "192.168.1.0/24": {
+                        "IPsInUse": 2,
+                        "DynamicIPsAvailable": 254
+                    }
+                }
+            }
+        }
+    }
+]
+```
+
+コンテナを起動すると eth0 のサブインターフェイスでコンテナが接続される。
+
+```sh
+docker run --network ipvlanl3 --name test --rm -d redhat/ubi10 tail -f /dev/null
+```
+
+```text
+5506033b0c6185f4703fa393e8ea6b0796fae84cc998f05eb81671bc8df5a6c3
+```
+
+コンテナホストの eth0 を確認する。
+
+```sh
+ip -d link show eth0
+```
+
+```text
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff promiscuity 0 allmulti 0 minmtu 68 maxmtu 65521 addrgenmode none numtxqueues 64 numrxqueues 64 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536 parentbus vmbus parentdev d2916833-b8d8-44ec-89dc-3f4cd7d84668
+    altname enx00155d002606
+```
+
+コンテナの eth0 を確認する。
+
+```sh
+docker exec test ip -d link show eth0
+```
+
+```text
+20: eth0@if2: <BROADCAST,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN mode DEFAULT group default
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff link-netnsid 0 promiscuity 0 allmulti 0 minmtu 68 maxmtu 65535
+    ipvlan  mode l3 bridge addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536
+```
+
+コンテナの eth0 の IP アドレスを確認する。
+
+```sh
+docker exec test ip -d addr show eth0
+```
+
+```text
+20: eth0@if2: <BROADCAST,MULTICAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff link-netnsid 0 promiscuity 0 allmulti 0 minmtu 68 maxmtu 65535
+    ipvlan  mode l3 bridge numtxqueues 1 numrxqueues 1 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536
+    inet 192.168.1.1/24 brd 192.168.1.255 scope global eth0
+       valid_lft forever preferred_lft forever
+```
+
+ルーティングは eth0 が設定される。
+
+```sh
+docker exec test ip route show
+```
+
+```text
+default dev eth0 scope link
+192.168.1.0/24 dev eth0 proto kernel scope link src 192.168.1.1
+```
+
+DNS は docker 内部の DNS サーバが設定される。
+
+```sh
+docker exec test cat /etc/resolv.conf
+```
+
+```text
+# Generated by Docker Engine.
+# This file can be edited; Docker Engine will not make further changes once it
+# has been modified.
+
+nameserver 127.0.0.11
+search mshome.net home.local
+options ndots:0
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(172.24.96.1)]
+# Overrides: []
+# Option ndots from: internal
+```
+
+## ドライバ `macvlan`
+
+コンテナホストの物理 NIC を共有して別の MAC アドレスをコンテナに設定する。
+
+物理 NIC のプロミスキャスを有効に変更される。
+
+### beidge モード
+
+既定で作成されるネットワークに `macvlan` はないため作成する。
+コンテナホストの `eth0` のネットワーク設定を指定してネットワークを作成する。
+
+```sh
+docker network create \
+    --driver macvlan \
+    --subnet 192.168.1.0/24 \
+    --gateway 192.168.1.1 \
+    -o parent=eth0 \
+    macvlanbr
+```
+
+```text
+fcb637eabf76777fa93c2b1ac24bb19445a9029000cc779331f9b2c555ed2d5f
+```
+
+ネットワークを確認する。
+
+```sh
+docker network inspect macvlanbr
+```
+
+```json
+[
+    {
+        "Name": "macvlanbr",
+        "Id": "fcb637eabf76777fa93c2b1ac24bb19445a9029000cc779331f9b2c555ed2d5f",
+        "Created": "2025-12-12T18:36:28.554396255+09:00",
+        "Scope": "local",
+        "Driver": "macvlan",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": {},
+            "Config": [
+                {
+                    "Subnet": "192.168.1.0/24",
+                    "IPRange": "",
+                    "Gateway": "192.168.1.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {
+            "parent": "eth0"
+        },
+        "Labels": {},
+        "Containers": {},
+        "Status": {
+            "IPAM": {
+                "Subnets": {
+                    "192.168.1.0/24": {
+                        "IPsInUse": 3,
+                        "DynamicIPsAvailable": 253
+                    }
+                }
+            }
+        }
+    }
+]
+```
+
+コンテナを起動すると eth0 のサブインターフェイスでコンテナが接続される。
+
+```sh
+docker run --network macvlanbr --name test --rm -d redhat/ubi10 tail -f /dev/null
+```
+
+```text
+1f0bc36ff8f77cad5d1c831f9e1ee302846665baae83d5493bfdf60b05863c8d
+```
+
+コンテナホストの eth0 を確認する。
+
+```sh
+ip -d link show eth0
+```
+
+```text
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000
+    link/ether 00:15:5d:00:26:06 brd ff:ff:ff:ff:ff:ff promiscuity 1 allmulti 0 minmtu 68 maxmtu 65521 addrgenmode none numtxqueues 64 numrxqueues 64 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536 parentbus vmbus parentdev d2916833-b8d8-44ec-89dc-3f4cd7d84668
+    altname enx00155d002606
+```
+
+コンテナの eth0 を確認する。
+
+```sh
+docker exec test ip -d link show eth0
+```
+
+```text
+6: eth0@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default
+    link/ether fa:d6:de:3e:b2:13 brd ff:ff:ff:ff:ff:ff link-netnsid 0 promiscuity 0 allmulti 0 minmtu 68 maxmtu 65521
+    macvlan mode bridge bcqueuelen 1000 usedbcqueuelen 1000 addrgenmode eui64 numtxqueues 1 numrxqueues 1 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536
+```
+
+コンテナの eth0 の IP アドレスを確認する。
+
+```sh
+docker exec test ip -d addr show eth0
+```
+
+```text
+6: eth0@if2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default
+    link/ether fa:d6:de:3e:b2:13 brd ff:ff:ff:ff:ff:ff link-netnsid 0 promiscuity 0 allmulti 0 minmtu 68 maxmtu 65521
+    macvlan mode bridge bcqueuelen 1000 usedbcqueuelen 1000 numtxqueues 1 numrxqueues 1 gso_max_size 62780 gso_max_segs 65535 tso_max_size 62780 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 62780 gro_ipv4_max_size 65536
+    inet 192.168.1.2/24 brd 192.168.1.255 scope global eth0
+       valid_lft forever preferred_lft forever
+```
+
+ルーティングは eth0 が設定される。
+
+```sh
+docker exec test ip route show
+```
+
+```text
+default via 192.168.1.1 dev eth0
+192.168.1.0/24 dev eth0 proto kernel scope link src 192.168.1.2
+```
+
+DNS は docker 内部の DNS サーバが設定される。
+
+```sh
+docker exec test cat /etc/resolv.conf
+```
+
+```text
+# Generated by Docker Engine.
+# This file can be edited; Docker Engine will not make further changes once it
+# has been modified.
+
+nameserver 127.0.0.11
+search mshome.net home.local
+options ndots:0
+
+# Based on host file: '/etc/resolv.conf' (internal resolver)
+# ExtServers: [host(172.24.96.1)]
+# Overrides: []
+# Option ndots from: internal
+```
+
+## Docker Compose
+
+`compose` でビルドするとプロジェクト名をもとにネットワークが作成される。
+下記の場合は */dev/fd/XXX* のためプロジェクト名が fd となりネットワーク fd_default が作成される。
+
+```sh
+docker compose -f <(cat <<"EOF"
+services:
+  app:
+    image: ubuntu
+    command: tail -f /dev/null
+EOF
+) run -d --build --rm app
+```
+
+```text
+[+] create 1/1
+[+]  1/1ork fd_default Created                                                                                                                                                                                            0.1s
+ ✔ Network fd_default Created                                                                                                                                                                                            0.1s
+Container fd-app-run-cf4bff3fdd4e Creating
+Container fd-app-run-cf4bff3fdd4e Created
+05827c824a8238484af717bb89d4e4d3b082c409320ebbdbf3953f1f861ed080
+```
+
+ネットワークを確認する。
+
+```sh
+docker network inspect fd_default
+```
+
+```json
+[
+    {
+        "Name": "fd_default",
+        "Id": "d6da788698b0a1bcda48ec6810b8c13b670b4eb9bd2daa51b6d99411bd03ad18",
+        "Created": "2025-12-12T19:01:42.291748323+09:00",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv4": true,
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.18.0.0/16",
+                    "IPRange": "",
+                    "Gateway": "172.18.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Options": {},
+        "Labels": {
+            "com.docker.compose.config-hash": "9569f69b227d70ac28ad7a82abd182fd583e1709f1553472f999b2c35d24124e",
+            "com.docker.compose.network": "default",
+            "com.docker.compose.project": "fd",
+            "com.docker.compose.version": "5.0.0"
+        },
+        "Containers": {
+            "05827c824a8238484af717bb89d4e4d3b082c409320ebbdbf3953f1f861ed080": {
+                "Name": "fd-app-run-cf4bff3fdd4e",
+                "EndpointID": "07f777937f58baa51b2b25d8c6aad8a8f6ca1e12f91182f256307fac216f13a2",
+                "MacAddress": "4a:3d:b7:3e:f0:43",
+                "IPv4Address": "172.18.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Status": {
+            "IPAM": {
+                "Subnets": {
+                    "172.18.0.0/16": {
+                        "IPsInUse": 4,
+                        "DynamicIPsAvailable": 65532
+                    }
+                }
+            }
+        }
+    }
+]
+```
+
+## 参考
+
+- [Networking overview](https://docs.docker.com/engine/network/)
+- [Docker 内蔵 DNS サーバ](https://docs.docker.jp/engine/userguide/networking/dockernetworks.html#docker-dns)
