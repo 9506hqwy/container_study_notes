@@ -2,4 +2,5 @@
 
 ```{toctree}
 dive
+osv_scanner
 ```
