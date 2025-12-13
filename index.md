@@ -8,6 +8,7 @@ numbered: 4
 ---
 
 docker/index
+tool/index
 ```
 
 ## 索引と検索
