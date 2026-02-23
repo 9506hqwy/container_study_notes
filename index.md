@@ -9,6 +9,7 @@ numbered: 4
 
 concept/index
 docker/index
+ramalama/index
 tool/index
 ```
 
