@@ -408,6 +408,38 @@ http://proxy3.home.local:8080
 `command` はコンテナ内のシェルで実行されないため明示的にシェルを起動する。
 シェル実行前に変数は展開されないように `$` をエスケープする。
 
+`--build-arg` オプションで引数として指定してビルド時のみ使用できる。
+
+```sh
+docker compose -f <(cat <<"EOF"
+services:
+  app:
+    build:
+      dockerfile_inline: |
+        FROM ubuntu
+        ARG HTTP_PROXY
+        RUN echo $$HTTP_PROXY
+      args:
+        - HTTP_PROXY=
+    command: bash -c 'echo $$HTTP_PROXY'
+EOF
+) build --build-arg HTTP_PROXY=http://proxy5.home.local:8080
+```
+
+```text
+ :
+ :
+=> CACHED [2/2] RUN echo http://proxy5.home.local:8080
+ :
+ :
+```
+
+コンテナイメージの pull 時はデーモンと同じで下記の優先順位で設定が参照される。
+
+1. 設定ファイル
+2. 環境変数(システム)
+3. 環境変数(実行時のシェル)
+
 ## 参考
 
 - [Daemon proxy configuration](https://docs.docker.com/engine/daemon/proxy/)
