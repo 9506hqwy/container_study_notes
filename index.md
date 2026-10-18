@@ -10,6 +10,7 @@ numbered: 4
 concept/index
 docker/index
 ramalama/index
+wsl/index
 tool/index
 ```
 
