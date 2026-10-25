@@ -185,6 +185,18 @@ curl http://127.0.0.1:10080
 </html>
 ```
 
+### ネットワーク作成
+
+ネットワークを作成する。
+
+```sh
+wslc network create nw-bridge
+```
+
+```text
+nw-bridge
+```
+
 ## ボリューム
 
 ### バインドマウント
@@ -229,7 +241,7 @@ ls -l /mnt/data/README.txt
 
 コンテナホストでファイルを作成してコンテナ内で所有者を確認する。
 
-```text
+```sh
 ls -l /mnt/data/host.txt
 ```
 
@@ -238,6 +250,64 @@ ls -l /mnt/data/host.txt
 ```
 
 コンテナホスト側から見るファイルの権限に違いは見えない。
+
+### ボリューム作成
+
+ボリュームを作成する。
+
+`--dirver` は `guest` と `vhd` を指定できる。
+`guest` は wslc セッションが持つ *storage.vhdx* の中にデータを保持する。
+`vhd` は新規に VHD ファイルを作成してデータを保持する。
+
+```sh
+wslc volume create --driver vhd -o SizeBytes=10737418240 vol-01
+```
+
+```text
+vol-01
+```
+
+ボリュームを確認する。
+
+```sh
+wslc volume inspect vol-01
+```
+
+```json
+[
+  {
+    "CreatedAt": "2026-10-25T13:45:52Z",
+    "Driver": "vhd",
+    "Labels": null,
+    "Mountpoint": "/var/lib/docker/volumes/vol-01/_data",
+    "Name": "vol-01",
+    "Options": {
+      "SizeBytes": "10737418240"
+    },
+    "Scope": "local",
+    "Status": {
+      "HostPath": "C:\\Users\\you\\AppData\\Local\\wslc\\sessions\\wslc-cli-you\\volumes\\vol-01.vhdx",
+      "SizeBytes": "10737418240"
+    }
+  }
+]
+```
+
+ボリューム vol-01 をコンテナ内の */mnt/data* にマウントする。
+
+```sh
+wslc run --rm -it -v vol-01:/mnt/data ubuntu /bin/bash
+```
+
+マウント情報を確認する。
+
+```sh
+findmnt /mnt/data
+```
+
+```text
+/mnt/data /dev/sde ext4   rw,relatime,discard
+```
 
 ## Dev Containers on Visual Studio Code
 
